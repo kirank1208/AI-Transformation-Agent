@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Broker Submission Request",
+  "description": "Accept the submission request enriches and submit to the underwriter workbench",
+  "properties": {
+    "submission": {
+      "type": "object",
+      "properties": {
+        "submissionGeneralInfo": {
+          "type": "object",
+          "properties": {
+            "submissionDescription": {
+              "type": "string",
+              "description": "A brief description of the submission."
+            },
+            "underWritingYear": {
+              "type": "string",
+              "pattern": "^(19|20)\\d{2}$",
+              "description": "The underwriting year (YYYY format)."
+            },
+            "inceptionDate": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "minItems": 3,
+              "maxItems": 3,
+              "description": "Policy inception date as [YYYY, MM, DD]."
+            },
+            "expiryDate": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "minItems": 3,
+              "maxItems": 3,
+              "description": "Policy expiration date as [YYYY, MM, DD]."
+            }
+          },
+          "required": ["submissionDescription", "underWritingYear", "inceptionDate", "expiryDate"]
+        },
+        "intermediaries": {
+          "type": "array",
+          "description": "List of intermediaries involved in the submission.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "party": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": ["Insured", "Broker", "Carrier"],
+                    "description": "The role of the party in the submission."
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "The name of the party."
+                  },
+                  "dunsNumber": {
+                    "type": "string",
+                    "pattern": "^\\d{9}$",
+                    "description": "The D-U-N-S number, a 9-digit unique business identifier."
+                  }
+                },
+                "required": ["role", "name", "dunsNumber"]
+              }
+            },
+            "required": ["party"]
+          }
+        }
+      },
+      "required": ["submissionGeneralInfo", "intermediaries"]
+    }
+  },
+  "required": ["submission"]
+}

@@ -1,0 +1,81 @@
+{
+  "submission": {
+    "initialInformation": {
+      "submissionDescription": {
+        "value": "Test Submission",
+        "description": "A brief description of the submission."
+      },
+      "underWritingYear": {
+        "value": "2025",
+        "description": "The underwriting year for the submission."
+      },
+      "expiryDate": {
+        "value": "2026-12-30T17:32:28Z",
+        "description": "The expiry date of the submission in ISO 8601 format."
+      },
+      "inceptionDate": {
+        "value": "2025-02-04T01:01:01Z",
+        "description": "The inception date of the submission in ISO 8601 format."
+      }
+    },
+    "parties": [
+      {
+        "description": "List of parties involved in the submission.",
+        "partyName": {
+          "value": "WTWFEB",
+          "description": "The name of the party."
+        },
+        "role": {
+          "value": "Insured",
+          "description": "The role of the party in the submission."
+        },
+        "dunsNumber": {
+          "value": "079481909",
+          "description": "The D-U-N-S number, a 9-digit unique business identifier."
+        }
+      }
+    ]
+  }
+}
+
+
+
+
+{
+  "submission": {
+    "initialInformation": {
+      "submissionDescription": "Test Submission",
+      "underWritingYear": "2025",
+      "expiryDate": "2026-12-30T17:32:28Z",
+      "inceptionDate": "2025-04-04T01:01:01Z"
+    },
+    "parties": [
+      {
+        "partyName": "MARSHFEB",
+        "role": "Insured",
+        "dunsNumber": "079481909"
+      }
+    ]
+  }
+}
+
+// Transformed output
+
+"submission": {
+"submissionGeneralInfo": {
+"submissionDescription": "Test Submission",
+"underWritingYear": "2025",
+"inceptionDate": [2025, 2, 4],
+"expiryDate": [2026, 12, 30]
+},
+"intermediaries": [
+{
+"party": {
+"role": "Insured",
+"name": "WTWFEB",
+"dunsNumber": "079481909"
+}
+}
+]
+}
+}
