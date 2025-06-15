@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "title": "Broker Submission Request",
-  "description": "Accept the submission request enriches and submit to the underwriter workbench",
+  "description": "Accept the submission request, enriches and submit to the underwriter workbench",
   "properties": {
     "submission": {
       "type": "object",
@@ -18,6 +18,16 @@
               "type": "string",
               "pattern": "^(19|20)\\d{2}$",
               "description": "The underwriting year (YYYY format)."
+            },
+            "codeAOC": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]+$",
+              "description": "International Standard Industrial Classification code"
+            },
+            "codeISIC": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]+$",
+              "description": "International Standard Industrial Classification code."
             },
             "inceptionDate": {
               "type": "array",

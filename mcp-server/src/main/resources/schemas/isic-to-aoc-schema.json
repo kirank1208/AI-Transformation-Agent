@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "ISIC to AOC Mapping Request",
+  "description": "Converts an ISIC code to an AOC code",
+  "properties": {
+    "isicCode": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9]+$",
+      "description": "The ISIC code to be converted"
+    }
+  },
+  "required": ["isicCode"]
+}

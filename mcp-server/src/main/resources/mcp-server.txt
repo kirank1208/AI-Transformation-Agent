@@ -309,3 +309,174 @@ resources/schemas/submission-intake-schema.json
   "required": ["submission"]
 }
 
+
+
+
+
+
+package com.example.mcpserver;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.core.io.ResourceLoader;
+import org.springframework.core.io.Resource;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/mcp")
+public class McpController {
+
+    private final ObjectMapper objectMapper;
+    private final ResourceLoader resourceLoader;
+
+    @Value("${submission.intake.url}")
+    private String submissionIntakeUrl;
+
+    // Store tool definitions in a map for easy access
+    private final Map<String, ObjectNode> tools = new HashMap<>();
+
+    public McpController(ObjectMapper objectMapper, ResourceLoader resourceLoader) {
+        this.objectMapper = objectMapper;
+        this.resourceLoader = resourceLoader;
+        initTools(); // Initialize tools on startup
+    }
+
+    private void initTools() {
+        try {
+            // Load "submissionIntake" tool
+            ObjectNode submissionIntake = objectMapper.createObjectNode();
+            submissionIntake.put("description", "Handles new submission requests");
+            submissionIntake.put("title", "Submission Intake");
+            submissionIntake.set("schema", loadSchema("schemas/submission-intake-schema.json"));
+            tools.put("submissionIntake", submissionIntake);
+
+            // Load "simpleTool" tool
+            ObjectNode simpleTool = objectMapper.createObjectNode();
+            simpleTool.put("description", "A very simple tool for demonstration");
+            simpleTool.put("title", "Simple Tool");
+            simpleTool.set("schema", loadSchema("schemas/simple-tool-schema.json"));
+            tools.put("simpleTool", simpleTool);
+
+            // Load "convertIsicToAoc" tool
+            ObjectNode convertIsicToAoc = objectMapper.createObjectNode();
+            convertIsicToAoc.put("description", "Convert ISIC code to AOC code");
+            convertIsicToAoc.put("title", "ISIC to AOC Converter");
+            convertIsicToAoc.set("schema", objectMapper.createObjectNode().put("type", "string").put("pattern", "^[A-Za-z0-9]+$"));
+            tools.put("convertIsicToAoc", convertIsicToAoc);
+
+            // Add more tools here as needed...
+
+        } catch (IOException e) {
+            throw new RuntimeException("Error loading schemas", e); // Handle this more gracefully in production
+        }
+    }
+
+    private ObjectNode loadSchema(String schemaFilePath) throws IOException {
+        Resource schemaResource = resourceLoader.getResource("classpath:" + schemaFilePath);
+        return (ObjectNode) objectMapper.readTree(schemaResource.getInputStream());
+    }
+
+    @GetMapping("/tools")
+    public ResponseEntity<JsonNode> getTools() {
+        return ResponseEntity.ok(objectMapper.valueToTree(tools));
+    }
+
+    @PostMapping("/execute")
+    public ResponseEntity<JsonNode> execute(@RequestBody JsonNode request) {
+        ObjectNode responseNode = objectMapper.createObjectNode();
+
+        // Basic validation
+        if (!request.has("tool") || !request.has("input")) {
+            responseNode.put("error", "Invalid request format. Expected 'tool' and 'input' fields.");
+            return ResponseEntity.badRequest().body(responseNode);
+        }
+
+        String tool = request.get("tool").asText();
+        JsonNode input = request.get("input");
+
+        if (tools.containsKey(tool)) {
+            // Tool-specific logic here
+            if ("submissionIntake".equals(tool)) {
+                // Extract data from the input (according to submission-intake-schema.json)
+                JsonNode submission = input.get("submission");
+                JsonNode submissionGeneralInfo = submission.get("submissionGeneralInfo");
+                JsonNode intermediaries = submission.get("intermediaries");
+
+                String submissionDescription = submissionGeneralInfo.get("submissionDescription").asText();
+                String underWritingYear = submissionGeneralInfo.get("underWritingYear").asText();
+                JsonNode inceptionDate = submissionGeneralInfo.get("inceptionDate");
+                JsonNode expiryDate = submissionGeneralInfo.get("expiryDate");
+
+                // Create a response (simulated)
+                ObjectNode submissionResponse = objectMapper.createObjectNode();
+                ObjectNode submissionGeneralInfoResponse = submissionResponse.putObject("submissionGeneralInfo");
+                submissionGeneralInfoResponse.put("submissionDescription", submissionDescription);
+                submissionGeneralInfoResponse.put("underWritingYear", underWritingYear);
+                submissionGeneralInfoResponse.set("inceptionDate", inceptionDate);
+                submissionGeneralInfoResponse.set("expiryDate", expiryDate);
+                submissionResponse.set("intermediaries", intermediaries);
+
+                responseNode.set("submission", submissionResponse);
+
+                ObjectNode metadataNode = objectMapper.createObjectNode();
+                metadataNode.put("executionTime", 123);
+                metadataNode.put("responseSize", 456);
+                responseNode.set("metadata", metadataNode);
+
+                return ResponseEntity.ok(responseNode);
+
+            } else if ("simpleTool".equals(tool)) {
+                // Extract data from input (according to simple-tool-schema.json)
+                String toolInput = input.get("toolInput").asText();
+
+                // Create a simple response
+                responseNode.put("toolOutput", "Processed: " + toolInput);
+                return ResponseEntity.ok(responseNode);
+
+            } else if ("convertIsicToAoc".equals(tool)) {
+                // Extract ISIC code from input
+                String isicCode = input.get("isicCode").asText();
+
+                // Convert ISIC to AOC
+                String aocCode = isicToAocMapping.getOrDefault(isicCode, "9999");
+                responseNode.put("aocCode", aocCode);
+                return ResponseEntity.ok(responseNode);
+            }
+
+        } else {
+            responseNode.put("error", "Tool '" + tool + "' not found.");
+            return ResponseEntity.badRequest().body(responseNode);
+        }
+
+        } else {
+            responseNode.put("error", "Tool '" + tool + "' not found.");
+            return ResponseEntity.badRequest().body(responseNode);
+        }
+    }
+
+    @GetMapping("/isicToAoc")
+    public ResponseEntity<JsonNode> convertIsicToAoc(@RequestParam("isicCode") String isicCode) {
+        ObjectNode responseNode = objectMapper.createObjectNode();
+
+        // Basic validation
+        if (!isicToAocMapping.containsKey(isicCode)) {
+            responseNode.put("error", "ISIC code '" + isicCode + "' not found.");
+            return ResponseEntity.badRequest().body(responseNode);
+        }
+
+        String aocCode = isicToAocMapping.get(isicCode);
+        responseNode.put("aocCode", aocCode);
+        return ResponseEntity.ok(responseNode);
+    }
+}
+
+
+Attached is my AI transformation agent code. It accepts a submission request and transform to the desired format based on the schema and call the target api. The attached code also contains the sample request and response in the readme.md file. Now, I got some extension requirement, I have added a new tool or api in mcpserver isicToAocMapping() that find the AOC code . Highlevel sample - convertIsicToAoc is also attached. Now, I want the agent/llm to decide to call this api/tool if there is a need. Suppose, user pass ISIC code int he submission request, i want agent to autonomously decide ok user has passed isic code target submission code requires AOC code  and then agent to call  isicToAocMapping() method in mcpserver to get the AOC code. I am also attaching the target request,response nd the target submission tool schema.
+
+
+Attached is my AI transformation agent code. It accepts a submission request and transform to the desired format based on the schema and call the target api. The attached code also contains the sample request and response in the readme.md file. Now, I got some extension requirement, I have added a new tool or api in mcpserver isicToAocMapping() that find the AOC code when the user pass the ISEC code in the request.
