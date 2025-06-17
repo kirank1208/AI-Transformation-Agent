@@ -24,8 +24,12 @@ public class AiService {
     private final ChatLanguageModel chatLanguageModel;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * Uses the AI model to select the most appropriate tool based on the user request.
+     */
     public String selectTool(Map<String, Object> userRequest, JsonNode tools) {
         try {
+            log.debug("Selecting tool for request: {}", userRequest.get("title"));
             String toolsDescription = buildToolsDescription(tools);
 
             String promptTemplateString = """
@@ -38,15 +42,13 @@ public class AiService {
             {{toolsDescription}}
 
             == Task ==
-            I need you to carefully analyze the user request and determine which tools are most appropriate. Please think through this decision step by step:
+            I need you to carefully analyze the user request and determine which tool is most appropriate. Please think through this decision step by step:
 
             1. Analyze the user request to understand its core requirements
             2. Review each tool's description and capabilities
-            3. Check if the submission request contains an ISIC code
-            4. If an ISIC code is present, include the "isicToAocMapping" tool to convert it to an AOC code
-            5. Compare the tools against the user's needs
-            6. Eliminate tools that don't fully meet the requirements
-            7. Justify your final selection
+            3. Compare the tools against the user's needs
+            4. Eliminate tools that don't fully meet the requirements
+            5. Justify your final selection
 
             == Response Format ==
             Please format your response as follows:
@@ -54,10 +56,10 @@ public class AiService {
             ------
             [Your detailed reasoning process here]
             ------
-            Final Answer: [Tool Name 1], [Tool Name 2], ...
+            Final Answer: [Tool Name]
 
             Rules:
-            * The final answer must be one or more of the tool names provided
+            * The final answer must be one of the tool names provided
             * Do not include any extra text after the final answer
             * Keep the reasoning detailed but concise
             """;
@@ -68,6 +70,8 @@ public class AiService {
             );
 
             Prompt prompt = PromptTemplate.from(promptTemplateString).apply(variables);
+            log.info("Prompt sent to LLM: {}", prompt.text());
+
             String response = chatLanguageModel.generate(prompt.text()).toString().trim();
             log.debug("Raw response from LLM: {}", response);
 
@@ -79,18 +83,18 @@ public class AiService {
                 log.info("=== LLM Reasoning Steps ===");
                 log.info(reasoning);
                 log.info("=== End of Reasoning ===");
-                log.info("Selected Tools: {}", finalAnswer);
+                log.info("Selected Tool: {}", finalAnswer);
 
-                String[] toolNames = finalAnswer.split(", ");
-                for (String toolName : toolNames) {
-                    String normalizedToolName = toolName.trim();
-                    if (tools.has(normalizedToolName)) {
-                        return normalizedToolName;
-                    }
+                // Normalize the finalAnswer to match the keys in the tools object
+                String normalizedFinalAnswer = finalAnswer.trim().toLowerCase();
+
+                // Check if the normalized finalAnswer exists in the tools object
+                if (tools.has(finalAnswer)) {
+                    return finalAnswer;
+                } else {
+                    log.error("Invalid tool selected: {}", finalAnswer);
+                    return null;
                 }
-
-                log.error("Invalid tool selected: {}", finalAnswer);
-                return null;
             } else {
                 log.error("Response format invalid: {}", response);
                 return null;
@@ -101,11 +105,15 @@ public class AiService {
         }
     }
 
+    /**
+     * Uses the AI model to transform a user request to match the required schema
+     */
     public JsonNode transformQuery(Map<String, Object> userRequest, JsonNode schema) {
-        String response = null;
+        String response=null;
         try {
             log.debug("Transforming query to match schema");
 
+            //  Create prompt template and variables
             String promptTemplateString = """
                 You are an expert at transforming user data into a JSON format that conforms to a given schema.
 
@@ -124,40 +132,47 @@ public class AiService {
                 * Do not wrap the JSON in code blocks (e.g., ```json).
                 * Ensure the JSON object is parsable by a JSON parser.
                 * The JSON output MUST represent a valid object.
-                * If the schema includes a "codeAOC" field and the user data contains an "codeISIC" field, convert the ISIC code to AOC code using the "isicToAocMapping" tool
                 """;
 
             Map<String, Object> variables = new HashMap<>();
             variables.put("userData", userRequest);
-            variables.put("schema", schema.toString());
+            variables.put("schema", schema.toString()); //  Pass the schema JsonNode
 
-            Prompt prompt = PromptTemplate.from(promptTemplateString).apply(variables);
+            PromptTemplate promptTemplate = PromptTemplate.from(promptTemplateString);
+            Prompt prompt = promptTemplate.apply(variables);
             log.info("PROMPT FEED-->" + prompt.text());
 
+            //  Get response from AI model
             response = chatLanguageModel.generate(prompt.text()).toString();
             log.debug("AI transformation response received");
-            log.info("LLM Generated transformation response before cleaning: " + response.toString());
+            log.info("LLM Generated transformation response before cleanning"+ response.toString());
+            //  Clean the response to remove any markdown formatting
             String cleanedResponse = cleanJson(response);
 
+            //  Parse JSON response
             return objectMapper.readTree(cleanedResponse);
         } catch (com.fasterxml.jackson.core.JsonParseException e) {
             log.error("Error parsing JSON from AI response. Raw response: {}", response, e);
+            //  Fallback: Attempt manual extraction if regex cleaning failed
             String extractedJson = extractJson(response);
             if (extractedJson != null) {
                 try {
                     return objectMapper.readTree(extractedJson);
                 } catch (Exception ex) {
                     log.error("Manual JSON extraction failed.", ex);
-                    return null;
+                    return null; //  Or a default JsonNode
                 }
             }
-            return null;
+            return null; //  Or a default JsonNode
         } catch (Exception e) {
             log.error("Error transforming query with AI", e);
             return null;
         }
     }
 
+    /**
+     * Helper method to build a description of available tools
+     */
     private String buildToolsDescription(JsonNode tools) {
         StringBuilder toolsDescription = new StringBuilder();
         Iterator<String> toolNames = tools.fieldNames();
@@ -178,7 +193,12 @@ public class AiService {
         return toolsDescription.toString();
     }
 
+    /**
+     * Helper method to trim the prompt if it exceeds the context window
+     */
     private String trimPrompt(String prompt, int maxContextLength) {
+        //  Assuming a rough estimate of 4 characters per token
+        log.info("BIN the Triming prompt method");
         int maxCharacters = maxContextLength * 4;
         if (prompt.length() > maxCharacters) {
             log.warn("Prompt exceeds context window. Trimming prompt.");
@@ -187,19 +207,37 @@ public class AiService {
         return prompt;
     }
 
+    /**
+     * Helper method to estimate the token count of a string
+     */
     private int estimateTokenCount(String text) {
+        //  Assuming a rough estimate of 4 characters per token
         return (int) Math.ceil(text.length() / 4.0);
     }
 
+    /**
+     * Cleans a string to extract a valid JSON payload.
+     *
+     * @param input The input string from the LLM.
+     * @return A cleaned JSON string, or the original string if cleaning fails.
+     */
     private String cleanJson(String input) {
         String cleaned = input.trim();
+        //  Remove code blocks, extraneous text, etc.
         cleaned = cleaned.replaceAll("```json", "");
         cleaned = cleaned.replaceAll("```", "");
-        cleaned = cleaned.replaceAll("^.*?\\{", "{");
-        cleaned = cleaned.replaceAll("\\}[^}]*$", "}");
+        cleaned = cleaned.replaceAll("^.*?\\{", "{"); //  Remove anything before the first '{'
+        cleaned = cleaned.replaceAll("\\}[^}]*$", "}"); //  Remove anything after the last '}'
         return cleaned;
     }
 
+    /**
+     * Attempts to extract a JSON object from a string using basic string manipulation.
+     * This is a fallback for when regex cleaning fails.
+     *
+     * @param input The input string.
+     * @return The extracted JSON string, or null if extraction fails.
+     */
     private String extractJson(String input) {
         int start = input.indexOf('{');
         int end = input.lastIndexOf('}');
