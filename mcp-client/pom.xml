@@ -9,7 +9,7 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.example</groupId>
-    <artifactId>transformation-ai-agent</artifactId>
+    <artifactId>mcp-client</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>mcp-client</name>
     <description>AI Agent for transforming user requests into target API requests</description>
