@@ -36,12 +36,12 @@ public class McpService {
     }
 
     /**
-     * Process a user request through the MCP pipeline
+     * Process a user request through the MCP pipeline.
      */
     public JsonNode processUserRequest(Map<String, Object> userRequest) {
         log.info("Starting MCP client process");
 
-        //  1. Get tools from MCP server
+        // 1. Get tools from MCP server
         JsonNode tools = getTools();
         if (tools == null) {
             log.error("Failed to retrieve tools from MCP server");
@@ -49,22 +49,21 @@ public class McpService {
         }
         log.debug("Retrieved tools: {}", tools);
 
-        //log.info("Processing user request: {}", userRequest.get("title"));
+        // 2. NEW: Check for ISIC code and enrich the request with the corresponding AOC code.
+        enrichRequestWithAocCode(userRequest);
 
-        //  3. Select appropriate tool using AI
+        // 3. Select appropriate tool using the (potentially enriched) AI request
         String selectedTool = aiService.selectTool(userRequest, tools);
         if (selectedTool == null) {
             log.error("Failed to select a tool");
             return null;
         }
-       // log.info("Selected tool: {}", selectedTool);
 
-        //  4. Transform the request using AI
-        //  Access the schema from the tools response
+        // 4. Transform the request using AI
         JsonNode schema = tools.get(selectedTool).get("schema");
         JsonNode transformedInput = aiService.transformQuery(
                 userRequest,
-                schema //  Pass the JsonNode schema
+                schema
         );
         if (transformedInput == null) {
             log.error("Failed to transform query");
@@ -72,12 +71,12 @@ public class McpService {
         }
         log.debug("Transformed input: {}", transformedInput);
 
-        //  5. Execute the tool via MCP server
+        // 5. Execute the tool via MCP server
         JsonNode response = executeTool(selectedTool, transformedInput);
         if (response != null) {
             log.info("Successfully executed tool");
             log.info("Response from MCP server: {}", response);
-            return response; // Return the response
+            return response;
         } else {
             log.error("Failed to execute tool");
             return null;
@@ -85,12 +84,61 @@ public class McpService {
     }
 
     /**
-     * Retrieves available tools from the MCP server
+     * NEW HELPER METHOD
+     * Checks for an ISIC code in the request, calls the mapping tool, and adds the AOC code.
+     */
+    private void enrichRequestWithAocCode(Map<String, Object> userRequest) {
+        try {
+            // Safely navigate the map to find the ISIC code
+            Map<String, Object> submission = (Map<String, Object>) userRequest.get("submission");
+            if (submission == null) return;
+
+            Map<String, Object> initialInformation = (Map<String, Object>) submission.get("initialInformation");
+            if (initialInformation == null || !initialInformation.containsKey("codeISIC")) {
+                log.debug("No ISIC code found in the request. Skipping enrichment.");
+                return; // No ISIC code present, nothing to do
+            }
+
+            Map<String, Object> isicCodeMap = (Map<String, Object>) initialInformation.get("codeISIC");
+            String isicCode = (String) isicCodeMap.get("value");
+
+            if (isicCode != null && !isicCode.isEmpty()) {
+                log.info("ISIC code found: {}. Attempting to fetch corresponding AOC code.", isicCode);
+
+                // Prepare the input for the isicToAocMapping tool
+                ObjectNode isicInput = objectMapper.createObjectNode();
+                isicInput.put("isicCode", isicCode);
+
+                // Execute the specific tool to get the AOC code
+                JsonNode aocResponse = executeTool("isicToAocMapping", isicInput);
+
+                if (aocResponse != null && aocResponse.has("aocCode")) {
+                    String aocCode = aocResponse.get("aocCode").asText();
+                    log.info("Successfully fetched AOC code: {}", aocCode);
+
+                    // Enrich the original user request with the new AOC code
+                    Map<String, String> aocCodeMap = new HashMap<>();
+                    aocCodeMap.put("value", aocCode);
+                    aocCodeMap.put("description", "Activity on Location code derived from ISIC.");
+                    initialInformation.put("codeAOC", aocCodeMap);
+                    log.info("User request has been enriched with AOC code.");
+                } else {
+                    log.warn("Failed to retrieve AOC code for ISIC: {}. Response: {}", isicCode, aocResponse);
+                }
+            }
+        } catch (Exception e) {
+            // Log the exception but don't stop the main process.
+            // The transformation can still proceed without the AOC code.
+            log.error("Error during ISIC to AOC enrichment process. The main flow will continue.", e);
+        }
+    }
+
+    /**
+     * Retrieves available tools from the MCP server.
      */
     private JsonNode getTools() {
         String url = mcpServerUrl + "/mcp/tools";
         log.debug("Requesting tools from: {}", url);
-
         try {
             ResponseEntity<JsonNode> response = restTemplate.getForEntity(url, JsonNode.class);
             if (response.getStatusCode().is2xxSuccessful()) {
@@ -106,11 +154,11 @@ public class McpService {
     }
 
     /**
-     * Executes a selected tool on the MCP server with transformed input
+     * Executes a selected tool on the MCP server with transformed input.
      */
     private JsonNode executeTool(String tool, JsonNode input) {
         String url = mcpServerUrl + "/mcp/execute";
-        log.debug("Executing tool at: {}", url);
+        log.debug("Executing tool '{}' at: {}", tool, url);
 
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -126,41 +174,12 @@ public class McpService {
             if (response.getStatusCode().is2xxSuccessful()) {
                 return response.getBody();
             } else {
-                log.error("Error executing tool: {}", response.getStatusCode());
+                log.error("Error executing tool '{}': {}", tool, response.getStatusCode());
                 return null;
             }
         } catch (Exception e) {
-            log.error("Exception while executing tool", e);
+            log.error("Exception while executing tool '{}'", tool, e);
             return null;
         }
-    }
-
-    /**
-     * Creates a sample user request for demonstration purposes
-     */
-    private Map<String, Object> createSampleUserRequest() {
-        Map<String, Object> userRequest = new HashMap<>();
-        //   Example: Submission Intake Request
-        //        userRequest.put("title", "Submission Intake Request");
-        //        userRequest.put("submission", Map.of(
-        //                "initialInformation", Map.of(
-        //                        "submissionDescription", "Test Submission",
-        //                        "underWritingYear", "2025",
-        //
-        //  "expiryDate", "2026-12-30T17:32:28Z",
-        //                        "inceptionDate", "2025-02-04T01:01:01Z"
-        //                ),
-        //                "parties", Collections.singletonList(Map.of(
-        //                        "partyName", "WTWFEB",
-        //
-        //          "role", "Insured",
-        //                        "dunsNumber", "079481909"
-        //                ))
-        //        ));
-        //   Example: Simple Tool Request (for testing)
-        userRequest.put("title", "Simple Tool Request");
-        userRequest.put("toolInput", "This is a test input");
-
-        return userRequest;
     }
 }

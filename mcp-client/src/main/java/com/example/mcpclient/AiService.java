@@ -70,7 +70,7 @@ public class AiService {
             );
 
             Prompt prompt = PromptTemplate.from(promptTemplateString).apply(variables);
-            log.info("Prompt sent to LLM: {}", prompt.text());
+            //log.info("Prompt sent to LLM: {}", prompt.text());
 
             String response = chatLanguageModel.generate(prompt.text()).toString().trim();
             log.debug("Raw response from LLM: {}", response);
@@ -80,10 +80,10 @@ public class AiService {
                 String reasoning = parts[1].trim();
                 String finalAnswer = parts[2].trim().replace("Final Answer: ", "").trim();
 
-                log.info("=== LLM Reasoning Steps ===");
-                log.info(reasoning);
-                log.info("=== End of Reasoning ===");
-                log.info("Selected Tool: {}", finalAnswer);
+               // log.info("=== LLM Reasoning Steps ===");
+                //log.info(reasoning);
+                //log.info("=== End of Reasoning ===");
+                //log.info("Selected Tool: {}", finalAnswer);
 
                 // Normalize the finalAnswer to match the keys in the tools object
                 String normalizedFinalAnswer = finalAnswer.trim().toLowerCase();
@@ -108,67 +108,58 @@ public class AiService {
     /**
      * Uses the AI model to transform a user request to match the required schema
      */
+// In AiService.java, inside the transformQuery method
+
     public JsonNode transformQuery(Map<String, Object> userRequest, JsonNode schema) {
         String response=null;
         try {
             log.debug("Transforming query to match schema");
 
-            //  Create prompt template and variables
+            // Create prompt template and variables
             String promptTemplateString = """
-                You are an expert at transforming user data into a JSON format that conforms to a given schema.
+            You are an expert at transforming user data into a JSON format that conforms to a given schema.
 
-                Here is the user data:
-                {{userData}}
+            Here is the user data:
+            {{userData}}
 
-                Here is the JSON schema you must adhere to:
-                {{schema}}
+            Here is the JSON schema you must adhere to:
+            {{schema}}
 
-                Transform the user data into a valid JSON object that matches the schema.
+            Transform the user data into a valid JSON object that matches the schema.
 
-                IMPORTANT INSTRUCTIONS:
+            IMPORTANT INSTRUCTIONS:
 
-                * Return ONLY a valid JSON object.
-                * Do not include any other text or explanations before or after the JSON.
-                * Do not wrap the JSON in code blocks (e.g., ```json).
-                * Ensure the JSON object is parsable by a JSON parser.
-                * The JSON output MUST represent a valid object.
-                """;
+            * The user data may contain an enriched 'codeAOC' field. If it is present, you MUST use its value for the 'codeAOC' property in the final JSON.
+            * Return ONLY a valid JSON object.
+            * Do not include any other text or explanations before or after the JSON.
+            * Do not wrap the JSON in code blocks (e.g., ```json).
+            * Ensure the JSON object is parsable by a JSON parser.
+            * The JSON output MUST represent a valid object.
+            """;
 
             Map<String, Object> variables = new HashMap<>();
             variables.put("userData", userRequest);
-            variables.put("schema", schema.toString()); //  Pass the schema JsonNode
+            variables.put("schema", schema.toString());
 
             PromptTemplate promptTemplate = PromptTemplate.from(promptTemplateString);
             Prompt prompt = promptTemplate.apply(variables);
             log.info("PROMPT FEED-->" + prompt.text());
 
-            //  Get response from AI model
+            // Get response from AI model
             response = chatLanguageModel.generate(prompt.text()).toString();
             log.debug("AI transformation response received");
-            log.info("LLM Generated transformation response before cleanning"+ response.toString());
-            //  Clean the response to remove any markdown formatting
+            log.info("LLM Generated transformation response before cleaning"+ response.toString());
+            // Clean the response to remove any markdown formatting
             String cleanedResponse = cleanJson(response);
 
-            //  Parse JSON response
+            // Parse JSON response
             return objectMapper.readTree(cleanedResponse);
-        } catch (com.fasterxml.jackson.core.JsonParseException e) {
-            log.error("Error parsing JSON from AI response. Raw response: {}", response, e);
-            //  Fallback: Attempt manual extraction if regex cleaning failed
-            String extractedJson = extractJson(response);
-            if (extractedJson != null) {
-                try {
-                    return objectMapper.readTree(extractedJson);
-                } catch (Exception ex) {
-                    log.error("Manual JSON extraction failed.", ex);
-                    return null; //  Or a default JsonNode
-                }
-            }
-            return null; //  Or a default JsonNode
         } catch (Exception e) {
-            log.error("Error transforming query with AI", e);
+            log.error("Error transforming query with AI. Raw response: {}", response, e);
             return null;
         }
     }
+
 
     /**
      * Helper method to build a description of available tools
